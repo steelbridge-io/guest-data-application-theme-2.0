@@ -1,0 +1,26 @@
+/** Table CSS */
+.save-edit-btn,
+.cancel-edit-btn {
+  margin-top: -84px;
+  margin-top: -84px;
+  margin-left: 10px;
+}
+
+.edit-textarea {
+  height: 100px;
+  margin-top: 8px;
+
+  width: 70%;
+}
+
+#gda-table {
+  &.table {
+    margin-bottom: 0;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    background-color: $smoke-white;
+    z-index: 100;
+  }
+}
