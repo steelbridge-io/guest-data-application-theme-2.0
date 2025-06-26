@@ -1,4 +1,3 @@
-
 <?php
 /**
  * Template Name: Guest Data Template
@@ -35,21 +34,21 @@ $gda_waiver_url = get_post_meta($post->ID, '_gda_meta_key_waiver_url', true);
 
 // === SEARCH AND FILTER UI SECTION ===
 // Create search input, navigation buttons, and filter controls
-echo '<div class="container gda-search-wrapper">
+echo '<div id="table-controls" class="container gda-search-wrapper">
         <div class="row display-flex align-items-center">
-            <div class="col-md-3">
+            <div class="col-md-3 control-item">
                 <input type="text" id="searchInput" placeholder="Search table..">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2 control-item">
                 <div class="search-buttons d-flex justify-content-center">
                     <button class="btn btn-danger" id="prevMatch">Previous</button>
                     <button class="btn btn-danger" id="nextMatch">Next</button>
                     <span id="matchInfo"></span>
                 </div>
             </div>
-            <div class="col-md-2 d-flex justify-content-center">
+            <div class="col-md-3 d-flex justify-content-center control-item">
                 <button class="btn btn-danger" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample" aria-expanded="false" aria-controls="collapseExample">
-                    Filter Table
+                    Filter Table By Arrival Date
                 </button>
             </div>';
 
@@ -64,12 +63,14 @@ echo '<div class="col-md-2 save-btn d-flex justify-content-center"></div>
         </div>
       </div>';
 
-// === HIDE PAST DATES CHECKBOX SECTION ===
-// Add checkbox option to hide past arrival dates
+// === ADDITIONAL FILTER OPTIONS SECTION ===
+// Add checkbox for hiding past dates and year filter input
 $hide_past_dates = isset($_GET['hide_past_dates']) ? $_GET['hide_past_dates'] : '';
-echo '<div class="container gda-hide-past-wrapper">
+$filter_year = isset($_GET['filter_year']) ? sanitize_text_field($_GET['filter_year']) : '';
+
+echo '<div class="container gda-additional-filters-wrapper">
              <div class="row">
-                 <div class="col-12">
+                 <div class="col-md-4">
                      <div class="form-check mb-3">
                          <input class="form-check-input" type="checkbox" id="hidePastDates" name="hide_past_dates" value="1" ' .
  ($hide_past_dates ? 'checked' : '') . '>
@@ -77,6 +78,21 @@ echo '<div class="container gda-hide-past-wrapper">
                              Hide past arrival dates
                          </label>
                      </div>
+                 </div>
+                 <div class="col-md-4">
+                     <div class="input-group mb-3">
+                         <span class="input-group-text">Filter by Year:</span>
+                         <input type="number" class="form-control" id="filterYear" name="filter_year" 
+                                value="' . esc_attr($filter_year) . '" 
+                                placeholder="e.g., 2024" 
+                                min="2020" 
+                                max="2030" 
+                                step="1">
+                         <button class="btn btn-outline-danger" type="button" id="applyYearFilter">Apply</button>
+                     </div>
+                 </div>
+                 <div class="col-md-4">
+                     ' . ($filter_year ? '<div class="mb-3"><button class="btn btn-outline-secondary" id="clearYearFilter">Clear Year Filter</button></div>' : '') . '
                  </div>
              </div>
            </div>';
@@ -135,6 +151,35 @@ if ($hide_past_dates) {
   ];
  } catch (Exception $e) {
   error_log('Error setting up future dates filter: ' . $e->getMessage());
+ }
+}
+
+// Add year filter if provided in GET parameters
+if ($filter_year && is_numeric($filter_year) && strlen($filter_year) === 4) {
+ try {
+  // Create date range for the entire year
+  $year_start = $filter_year . '-01-01';
+  $year_end = $filter_year . '-12-31';
+
+  // Validate the year input
+  $start_date = DateTime::createFromFormat('Y-m-d', $year_start);
+  $end_date = DateTime::createFromFormat('Y-m-d', $year_end);
+
+  if ($start_date && $end_date) {
+   // Add date range filter for the specified year
+   $search_criteria['field_filters'][] = [
+    'key' => '46',
+    'value' => $year_start,
+    'operator' => '>='
+   ];
+   $search_criteria['field_filters'][] = [
+    'key' => '46',
+    'value' => $year_end,
+    'operator' => '<='
+   ];
+  }
+ } catch (Exception $e) {
+  error_log('Error setting up year filter: ' . $e->getMessage());
  }
 }
 
@@ -260,6 +305,19 @@ if ($form_id) {
    'page_size' => 1000   // Get up to 1000 entries (adjust as needed)
   );
   $entries = GFAPI::get_entries($form_id, $search_criteria, null, $paging);
+
+  // === DISPLAY FILTER STATUS ===
+  // Show current active filters to user
+  $filter_status_messages = [];
+  if ($hide_past_dates) {
+   $filter_status_messages[] = 'Hiding past dates';
+  }
+  if ($filter_year) {
+   $filter_status_messages[] = 'Filtered by year: ' . esc_html($filter_year);
+  }
+  if (!empty($filter_status_messages)) {
+   echo '<div class="container mt-3 mb-3"><div class="alert alert-success">Active filters: ' . implode(' | ', $filter_status_messages) . '</div></div>';
+  }
 
   echo '<div class="container mt-3 mb-3"><div class="alert alert-info">Showing ' . count($entries) . ' entries</div></div>';
 
@@ -624,26 +682,68 @@ if ($form_id) {
 }
 echo '</div>'; // End travel-form-posts div
 
-// === JAVASCRIPT FOR CHECKBOX FUNCTIONALITY ===
-// Add JavaScript to handle the checkbox interaction
+// === JAVASCRIPT FOR FILTER FUNCTIONALITY ===
+// Add JavaScript to handle checkbox and year filter interactions
 echo '<script>
 document.addEventListener("DOMContentLoaded", function() {
     const hidePastDatesCheckbox = document.getElementById("hidePastDates");
+    const filterYearInput = document.getElementById("filterYear");
+    const applyYearFilterBtn = document.getElementById("applyYearFilter");
+    const clearYearFilterBtn = document.getElementById("clearYearFilter");
     
+    // Handle hide past dates checkbox
     if (hidePastDatesCheckbox) {
         hidePastDatesCheckbox.addEventListener("change", function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            
-            if (this.checked) {
-                urlParams.set("hide_past_dates", "1");
-            } else {
-                urlParams.delete("hide_past_dates");
-            }
-            
-            // Preserve other existing parameters
-            const newUrl = window.location.pathname + "?" + urlParams.toString();
-            window.location.href = newUrl;
+            updateURL();
         });
+    }
+    
+    // Handle year filter apply button
+    if (applyYearFilterBtn) {
+        applyYearFilterBtn.addEventListener("click", function() {
+            updateURL();
+        });
+    }
+    
+    // Handle year filter input on Enter key
+    if (filterYearInput) {
+        filterYearInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                updateURL();
+            }
+        });
+    }
+    
+    // Handle clear year filter button
+    if (clearYearFilterBtn) {
+        clearYearFilterBtn.addEventListener("click", function() {
+            filterYearInput.value = "";
+            updateURL();
+        });
+    }
+    
+    function updateURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Handle hide past dates checkbox
+        if (hidePastDatesCheckbox && hidePastDatesCheckbox.checked) {
+            urlParams.set("hide_past_dates", "1");
+        } else {
+            urlParams.delete("hide_past_dates");
+        }
+        
+        // Handle year filter
+        const yearValue = filterYearInput ? filterYearInput.value.trim() : "";
+        if (yearValue && /^\d{4}$/.test(yearValue)) {
+            urlParams.set("filter_year", yearValue);
+        } else {
+            urlParams.delete("filter_year");
+        }
+        
+        // Preserve other existing parameters (like filter_arrival_date)
+        const newUrl = window.location.pathname + "?" + urlParams.toString();
+        window.location.href = newUrl;
     }
 });
 </script>';

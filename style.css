@@ -834,4 +834,10 @@ footer,
   z-index: 100;
 }
 
+@media (max-width: 767px) {
+  #table-controls .control-item {
+    margin: 10px;
+  }
+}
+
 /*# sourceMappingURL=style.css.map */
